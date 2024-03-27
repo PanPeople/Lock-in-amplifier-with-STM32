@@ -20,6 +20,7 @@
 #include "main.h"
 #include "adc.h"
 #include "dac.h"
+#include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -47,6 +48,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+
+uint16_t temp[16];
 
 /* USER CODE END PV */
 
@@ -89,11 +92,17 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_ADC1_Init();
   MX_DAC_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+
+  // start the ADC with IT
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)temp, 16);
+    // start the timer
+    HAL_TIM_Base_Start_IT(&htim3);
 
   /* USER CODE END 2 */
 
@@ -156,6 +165,23 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+// callback function for the ADC conversion complete
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+
+	uint16_t signal=0;
+	for (uint8_t i = 0; i< 16; i++ ){
+		signal += temp[i];
+	}
+
+	signal /=16;
+
+  // send the value to the serial port
+  char buffer[50];
+  sprintf(buffer, "ADC value: %lu\n\r", signal);
+  HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+}
 
 /* USER CODE END 4 */
 

@@ -166,14 +166,16 @@ int main(void)
   // start the ADC with IT
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE);
 
+  // start the DAC channel 1 with DMA
+  HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)sineLookupTable, LookUpTableSize, DAC_ALIGN_12B_R);
+
 
   //HAL_ADC_Start_IT(&hadc1);
     // start the timer 3
     HAL_TIM_Base_Start(&htim3);
     // start the timer 2
     HAL_TIM_Base_Start(&htim2);
-    // start the DAC channel 1 with DMA
-    HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*)sineLookupTable, LookUpTableSize, DAC_ALIGN_12B_R);
+
 
   /* USER CODE END 2 */
 
@@ -242,6 +244,10 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
   // iterate over the first half of the buffer
   for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
   {
+      char buffer[50];
+      sprintf(buffer, "Signal2 = %lu\r\n",ADC_buffer1[i]);
+      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
     // multiply the ADC value with the sine wave value
     ADC_buffer_temp[i] = ADC_buffer1[i]*sineLookupTable[i%100];
 
@@ -256,12 +262,29 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
     // multiply by the square root of 2
     ADC_buffer_temp[i] = ADC_buffer_temp[i] * 1.41421356237;
 
-    // send the value to the serial port
-    char buffer[50];
-    sprintf(buffer, "Signal1 = %lu\r\n", ADC_buffer_temp[i]);
-    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    // send the value every 10 samples
+//    if(i%299 == 0)
+//    {
+//      // send the value to the serial port
+//      char buffer[50];
+//      sprintf(buffer, "Signal1 = %lu, Signal2 = %lu\r\n", ADC_buffer_temp[i],ADC_buffer1[i]);
+//      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+//    }
+
+//     // send the value to the serial port
+//     char buffer[50];
+// //    sprintf(buffer, "Signal1 = %lu\r\n", ADC_buffer_temp[i]);
+//     sprintf(buffer, "Signal1 = %lu\r\n", ADC_buffer_temp[i]);
+//     HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+
+
 
   }
+  // take whole ADC_buffer_temp and transmit it via UART by adding the "Signal1 = " string to every value using sprintf
+  //HAL_UART_Transmit(&huart2, (uint8_t*)ADC_buffer_temp, ADC_BUFFER_SIZE/2, HAL_MAX_DELAY);
+
 
 }
 
@@ -282,6 +305,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
   // iterate over the first half of the buffer
   for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
   {
+
+	    char buffer[50];
+	    sprintf(buffer, "Signal2 = %lu\r\n",ADC_buffer1[i]);
+	    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
     // multiply the ADC value with the sine wave value
     ADC_buffer_temp[i] = ADC_buffer1[i+ADC_BUFFER_SIZE/2]*sineLookupTable[i%100];
 
@@ -296,10 +323,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     // multiply by the square root of 2
     ADC_buffer_temp[i] = ADC_buffer_temp[i] * 1.41421356237;
 
-    // send the value to the serial port
-    char buffer[50];
-    sprintf(buffer, "Signal1 = %lu\r\n", ADC_buffer_temp[i]);
-    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+//    if(i%299 == 0)
+//    {
+//      // send the value to the serial port
+//      char buffer[50];
+//      sprintf(buffer, "Signal1 = %lu, Signal2 = %lu\r\n", ADC_buffer_temp[i],ADC_buffer1[i]);
+//      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+//    }
 
   }
 

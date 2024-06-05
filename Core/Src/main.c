@@ -91,12 +91,41 @@ const uint16_t sineLookupTable[] = {
 100, 144, 195, 253, 319, 391, 470, 555,
 646, 742, 844, 950, 1061, 1176, 1294, 1415,
 1538, 1664, 1791, 1919, 2047
-}; 
+}; //101 -> change later to 100
+
+
+const float_t sineLookupTableFloat[] = {
+ 0.0000000000, 0.0627905195, 0.1253332336, 0.1873813146,
+ 0.2486898872, 0.3090169944, 0.3681245527, 0.4257792916,
+ 0.4817536741, 0.5358267950, 0.5877852523, 0.6374239897,
+ 0.6845471059, 0.7289686274, 0.7705132428, 0.8090169944,
+ 0.8443279255, 0.8763066800, 0.9048270525, 0.9297764859,
+ 0.9510565163, 0.9685831611, 0.9822872507, 0.9921147013,
+ 0.9980267284, 1.0000000000, 0.9980267284, 0.9921147013,
+ 0.9822872507, 0.9685831611, 0.9510565163, 0.9297764859,
+ 0.9048270525, 0.8763066800, 0.8443279255, 0.8090169944,
+ 0.7705132428, 0.7289686274, 0.6845471059, 0.6374239897,
+ 0.5877852523, 0.5358267950, 0.4817536741, 0.4257792916,
+ 0.3681245527, 0.3090169944, 0.2486898872, 0.1873813146,
+ 0.1253332336, 0.0627905195, 0.0000000000,-0.0627905195,
+-0.1253332336,-0.1873813146,-0.2486898872,-0.3090169944,
+-0.3681245527,-0.4257792916,-0.4817536741,-0.5358267950,
+-0.5877852523,-0.6374239897,-0.6845471059,-0.7289686274,
+-0.7705132428,-0.8090169944,-0.8443279255,-0.8763066800,
+-0.9048270525,-0.9297764859,-0.9510565163,-0.9685831611,
+-0.9822872507,-0.9921147013,-0.9980267284,-1.0000000000,
+-0.9980267284,-0.9921147013,-0.9822872507,-0.9685831611,
+-0.9510565163,-0.9297764859,-0.9048270525,-0.8763066800,
+-0.8443279255,-0.8090169944,-0.7705132428,-0.7289686274,
+-0.6845471059,-0.6374239897,-0.5877852523,-0.5358267950,
+-0.4817536741,-0.4257792916,-0.3681245527,-0.3090169944,
+-0.2486898872,-0.1873813146,-0.1253332336,-0.0627905195 };
 
 // temp buffer to store the ADC values | length = 600
 uint16_t ADC_buffer[ADC_BUFFER_SIZE];
 // temp buffer
 uint16_t ADC_buffer_temp[ADC_BUFFER_SIZE/2];
+float ADC_buffer_temp_float[ADC_BUFFER_SIZE/2];
 // output buffer
 uint16_t LOCK_IN_OUT[ADC_BUFFER_SIZE/2];
 
@@ -113,6 +142,8 @@ uint16_t temp[4];
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+uint16_t calculate_mean(uint16_t* samples, uint16_t num_samples);
+float calculata_mean_float(float* samples, uint16_t num_samples);
 
 /* USER CODE END PFP */
 
@@ -241,12 +272,31 @@ void SystemClock_Config(void)
 // half transfer callback function for the ADC
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
+
+    // prescale the ADC value to  range -3.3V to 3.3V and store it in the ADC_buffer_temp_float
+    for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
+    {
+        ADC_buffer_temp_float[i] = (float)ADC_buffer1[i] * 1.0 / 4095.0;
+    }
+
+    // calculate the mean value of the ADC_buffer_temp_float
+    float mean = calculate_mean(ADC_buffer1, ADC_BUFFER_SIZE/2);
+
+    // remove the DC offset
+    for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
+    {
+        ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] - mean;
+    }
+
+
   // iterate over the first half of the buffer
   for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
   {
       char buffer[50];
       sprintf(buffer, "Signal2 = %lu\r\n",ADC_buffer1[i]);
       HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+
 
     // multiply the ADC value with the sine wave value
     ADC_buffer_temp[i] = ADC_buffer1[i]*sineLookupTable[i%100];
@@ -334,6 +384,68 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
   }
 
 }
+
+
+
+
+
+
+// Function to calculate the mean value using chunked summation
+uint16_t calculate_mean(uint16_t* samples, uint16_t num_samples) {
+    uint32_t partial_sums[NUM_CHUNKS] = {0};
+    uint32_t total_sum = 0;
+    uint16_t chunk_size = num_samples / NUM_CHUNKS;
+
+    // Calculate partial sums
+    for (uint16_t i = 0; i < NUM_CHUNKS; i++) {
+        for (uint16_t j = 0; j < chunk_size; j++) {
+            partial_sums[i] += samples[i * chunk_size + j];
+        }
+    }
+
+    // Combine partial sums
+    for (uint16_t i = 0; i < NUM_CHUNKS; i++) {
+        total_sum += partial_sums[i];
+    }
+
+    // Handle any remaining samples
+    uint16_t remaining_samples = num_samples % NUM_CHUNKS;
+    for (uint16_t i = num_samples - remaining_samples; i < num_samples; i++) {
+        total_sum += samples[i];
+    }
+
+    // Calculate mean
+    return (uint16_t)(total_sum / num_samples);
+}
+
+float calculata_mean_float(float* samples, uint16_t num_samples) {
+    float partial_sums[NUM_CHUNKS] = {0};
+    float total_sum = 0;
+    uint16_t chunk_size = num_samples / NUM_CHUNKS;
+
+    // Calculate partial sums
+    for (uint16_t i = 0; i < NUM_CHUNKS; i++) {
+        for (uint16_t j = 0; j < chunk_size; j++) {
+            partial_sums[i] += samples[i * chunk_size + j];
+        }
+    }
+
+    // Combine partial sums
+    for (uint16_t i = 0; i < NUM_CHUNKS; i++) {
+        total_sum += partial_sums[i];
+    }
+
+    // Handle any remaining samples
+    uint16_t remaining_samples = num_samples % NUM_CHUNKS;
+    for (uint16_t i = num_samples - remaining_samples; i < num_samples; i++) {
+        total_sum += samples[i];
+    }
+
+    // Calculate mean
+    return total_sum / num_samples;
+}
+
+
 
 /* USER CODE END 4 */
 

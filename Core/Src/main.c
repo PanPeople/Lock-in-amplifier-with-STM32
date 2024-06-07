@@ -49,6 +49,8 @@
 
 static float xv[NZEROS+1], yv[NPOLES+1];
 
+#define NUM_CHUNKS 10
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -94,7 +96,7 @@ const uint16_t sineLookupTable[] = {
 }; //101 -> change later to 100
 
 
-const float_t sineLookupTableFloat[] = {
+const float sineLookupTableFloat[] = {
  0.0000000000, 0.0627905195, 0.1253332336, 0.1873813146,
  0.2486898872, 0.3090169944, 0.3681245527, 0.4257792916,
  0.4817536741, 0.5358267950, 0.5877852523, 0.6374239897,
@@ -121,6 +123,35 @@ const float_t sineLookupTableFloat[] = {
 -0.4817536741,-0.4257792916,-0.3681245527,-0.3090169944,
 -0.2486898872,-0.1873813146,-0.1253332336,-0.0627905195 };
 
+const float cosineLookupTableFloat[] = {
+1.0000000000, 0.9980267284, 0.9921147013,
+ 0.9822872507, 0.9685831611, 0.9510565163, 0.9297764859,
+ 0.9048270525, 0.8763066800, 0.8443279255, 0.8090169944,
+ 0.7705132428, 0.7289686274, 0.6845471059, 0.6374239897,
+ 0.5877852523, 0.5358267950, 0.4817536741, 0.4257792916,
+ 0.3681245527, 0.3090169944, 0.2486898872, 0.1873813146,
+ 0.1253332336, 0.0627905195, 0.0000000000,-0.0627905195,
+-0.1253332336,-0.1873813146,-0.2486898872,-0.3090169944,
+-0.3681245527,-0.4257792916,-0.4817536741,-0.5358267950,
+-0.5877852523,-0.6374239897,-0.6845471059,-0.7289686274,
+-0.7705132428,-0.8090169944,-0.8443279255,-0.8763066800,
+-0.9048270525,-0.9297764859,-0.9510565163,-0.9685831611,
+-0.9822872507,-0.9921147013,-0.9980267284,-1.0000000000,
+-0.9980267284,-0.9921147013,-0.9822872507,-0.9685831611,
+-0.9510565163,-0.9297764859,-0.9048270525,-0.8763066800,
+-0.8443279255,-0.8090169944,-0.7705132428,-0.7289686274,
+-0.6845471059,-0.6374239897,-0.5877852523,-0.5358267950,
+-0.4817536741,-0.4257792916,-0.3681245527,-0.3090169944,
+-0.2486898872,-0.1873813146,-0.1253332336,-0.0627905195,
+0.0000000000, 0.0627905195, 0.1253332336, 0.1873813146,
+ 0.2486898872, 0.3090169944, 0.3681245527, 0.4257792916,
+ 0.4817536741, 0.5358267950, 0.5877852523, 0.6374239897,
+ 0.6845471059, 0.7289686274, 0.7705132428, 0.8090169944,
+ 0.8443279255, 0.8763066800, 0.9048270525, 0.9297764859,
+ 0.9510565163, 0.9685831611, 0.9822872507, 0.9921147013,
+ 0.9980267284
+};
+
 // temp buffer to store the ADC values | length = 600
 uint16_t ADC_buffer[ADC_BUFFER_SIZE];
 // temp buffer
@@ -144,6 +175,11 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 uint16_t calculate_mean(uint16_t* samples, uint16_t num_samples);
 float calculata_mean_float(float* samples, uint16_t num_samples);
+void replace_dot_with_comma(char* str);
+
+
+
+void lock_in_calculation(void);// all variables are global for now
 
 /* USER CODE END PFP */
 
@@ -280,37 +316,39 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
     }
 
     // calculate the mean value of the ADC_buffer_temp_float
-    float mean = calculate_mean(ADC_buffer1, ADC_BUFFER_SIZE/2);
+    float mean = calculata_mean_float(ADC_buffer_temp_float, ADC_BUFFER_SIZE/2);
 
-    // remove the DC offset
-    for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
-    {
-        ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] - mean;
-    }
+    // // remove the DC offset
+    // for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
+    // {
+    //     ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] - mean;
+    // }
 
 
   // iterate over the first half of the buffer
   for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
   {
-      char buffer[50];
-      sprintf(buffer, "Signal2 = %lu\r\n",ADC_buffer1[i]);
-      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
 
+    // remove the DC offset
+    ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] - mean;
 
+    // char buffer[50];
+    // sprintf(buffer, "Signal2 = %f.\r\n",ADC_buffer_temp_float[i]);
+    // HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
 
     // multiply the ADC value with the sine wave value
-    ADC_buffer_temp[i] = ADC_buffer1[i]*sineLookupTable[i%100];
+    ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i]*sineLookupTableFloat[i%100];
 
     // IIR filter
     xv[0] = xv[1]; 
-    xv[1] = ADC_buffer_temp[i] / GAIN;
+    xv[1] = ADC_buffer_temp_float[i] / GAIN;
     yv[0] = yv[1]; 
     yv[1] =   (xv[0] + xv[1])
                   + (  0.9995288721 * yv[0]);
-    ADC_buffer_temp[i] = yv[1];
+    ADC_buffer_temp_float[i] = yv[1];
 
     // multiply by the square root of 2
-    ADC_buffer_temp[i] = ADC_buffer_temp[i] * 1.41421356237;
+    ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] * 1.41421356237;
 
 
     // send the value every 10 samples
@@ -329,6 +367,12 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 //     HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
 
 
+      char buffer[50];
+      sprintf(buffer, "Signal2 = %f\r\n",ADC_buffer_temp_float[i]);
+      //replace_dot_with_comma(buffer);
+      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+
 
 
   }
@@ -342,37 +386,50 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 // callback function for the ADC conversion complete
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-// // 13-bit resolution with 4x oversampling (4^1 = 4)
-// 	uint16_t signal=0;
 
-// 	for (uint8_t i = 0; i< 4; i++ ){
-// 		signal += temp[i];
-// 	}
+    // prescale the ADC value to  range -3.3V to 3.3V and store it in the ADC_buffer_temp_float
+    for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
+    {
+        ADC_buffer_temp_float[i] = (float)ADC_buffer1[i] * 1.0 / 4095.0;
+    }
 
-// 	signal /=4;
+    // calculate the mean value of the ADC_buffer_temp_float
+    float mean = calculata_mean_float(ADC_buffer_temp_float, ADC_BUFFER_SIZE/2);
+
+    // // remove the DC offset
+    // for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
+    // {
+    //     ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] - mean;
+    // }
 
 
   // iterate over the first half of the buffer
   for (uint16_t i = 0; i < ADC_BUFFER_SIZE/2; i++)
   {
 
-	    char buffer[50];
-	    sprintf(buffer, "Signal2 = %lu\r\n",ADC_buffer1[i]);
-	    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+    // remove the DC offset
+    ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] - mean;
+
+    // char buffer[50];
+    // sprintf(buffer, "Signal2 = %f.\r\n",ADC_buffer_temp_float[i]);
+    // HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
     // multiply the ADC value with the sine wave value
-    ADC_buffer_temp[i] = ADC_buffer1[i+ADC_BUFFER_SIZE/2]*sineLookupTable[i%100];
+    ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i]*sineLookupTableFloat[i%100];
 
     // IIR filter
     xv[0] = xv[1]; 
-    xv[1] = ADC_buffer_temp[i] / GAIN;
+    xv[1] = ADC_buffer_temp_float[i] / GAIN;
     yv[0] = yv[1]; 
     yv[1] =   (xv[0] + xv[1])
                   + (  0.9995288721 * yv[0]);
-    ADC_buffer_temp[i] = yv[1];
+    ADC_buffer_temp_float[i] = yv[1];
 
     // multiply by the square root of 2
-    ADC_buffer_temp[i] = ADC_buffer_temp[i] * 1.41421356237;
+    ADC_buffer_temp_float[i] = ADC_buffer_temp_float[i] * 1.41421356237;
 
+
+    // send the value every 10 samples
 //    if(i%299 == 0)
 //    {
 //      // send the value to the serial port
@@ -381,11 +438,37 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 //      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
 //    }
 
+//     // send the value to the serial port
+//     char buffer[50];
+// //    sprintf(buffer, "Signal1 = %lu\r\n", ADC_buffer_temp[i]);
+//     sprintf(buffer, "Signal1 = %lu\r\n", ADC_buffer_temp[i]);
+//     HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+
+      char buffer[50];
+      sprintf(buffer, "Signal2 = %f\r\n",ADC_buffer_temp_float[i]);
+      //replace_dot_with_comma(buffer);
+      HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+
+
+
   }
+  // take whole ADC_buffer_temp and transmit it via UART by adding the "Signal1 = " string to every value using sprintf
+  //HAL_UART_Transmit(&huart2, (uint8_t*)ADC_buffer_temp, ADC_BUFFER_SIZE/2, HAL_MAX_DELAY);
+
 
 }
 
-
+// Function to replace dot with comma in a string
+void replace_dot_with_comma(char* str) {
+    while (*str != '\0') {
+        if (*str == '.') {
+            *str = ',';
+        }
+        str++;
+    }
+}
 
 
 
